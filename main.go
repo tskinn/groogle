@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+//	"encoding/json"
 )
 
 func main() {
@@ -16,13 +17,11 @@ func main() {
 	client := &http.Client{
 		Transport: &transport.APIKey{Key: apiKey},
 	}
-	fmt.Println("create service")
 	customSearchService, err := customsearch.New(client)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
-	fmt.Println("create list")
 	listCall := customSearchService.Cse.List("star wars")
 	listCall.Cx("001559197599027589089:09osstjowqu")
 	
@@ -30,14 +29,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	
-	bites, err := search.MarshalJSON()
-	if err != nil {
-		log.Fatal(err)
+	// print links
+	for _, link := range search.Items {
+		fmt.Println(link.Link)
 	}
-	
-	fmt.Println("done")
-	//fmt.Print("%x", bites)
-	s := string(bites[:len(bites)])
-	fmt.Println(s)
 }
