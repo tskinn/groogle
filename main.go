@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"io/ioutil"
+
 //	"encoding/json"
 )
 
@@ -32,7 +34,14 @@ func main() {
 	}
 	// print links
 	for _, link := range search.Items {
-		fmt.Println(link.Link)
+		
+		body := getLinkBody(link.Link)
+		fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
+		
+		refs := getReferences(body, "Luke")
+		for _, i := range refs {
+			fmt.Println("<<<   " + i + "   >>>")
+		}
 	}
 
 	// go get links and stuff and search them
@@ -40,25 +49,58 @@ func main() {
 }
 
 // fetch the actual page. maybe only get the body of html? maybe not
-func getLink() string {
-	return ""
+func getLinkBody(link string) string {
+	res, err := http.Get(link)
+	if err != nil {
+		log.Fatal(err)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+
+	res.Body.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	// TODO check to see if there is better way to convert byte slice to string
+	return string(body[:])
 }
 
 // get all the references to the key string
 func getReferences(page, key string) []string {
 	count := strings.Count(page, key)
-	references := make([]string, count)
+//	references := make([]string, count)
 	rest := page
-	reference := ""
+	index := 0
+	indices := make([]int, 1)
 	for i := 0; i < count; i++ {
-		rest, reference = getReference(rest, key)
-		references = append(references, reference)
+		rest, index = getReferenceIndex(rest, key, index)
+		indices = append(indices, index)
+		//references = append(references, reference)
 	}
+	references := getQuotes(page, indices, len(key), 60)
 	return references
 }
 
 // find single reference to key and get surounding context and rest of body to search
-func getReference(rest, key string) (string, string) {
+func getReferenceIndex(rest, key string, pageLenDif int) (string, int) {
 	index := strings.Index(rest, key)
-	return rest[index:], rest[index-10:index+10]
+	return rest[index+len(key):], pageLenDif + index + len(key)
+}
+
+func getQuotes(page string, indices []int, keyLen, contextLength int) []string {
+	zero, leng := 0, len(page)
+	quotes := make([]string, 0)
+	for i := 0; i < len(indices); i++ {
+		back, front := indices[i]-contextLength, indices[i]+contextLength+keyLen
+		if indices[i] == -1 || indices[i] == 0 {
+			continue
+		}
+		if front > leng {
+			front = leng
+		}
+		if back < zero {
+			back = zero
+		}
+		quotes = append(quotes, page[back:front])
+	}
+	return quotes
 }
