@@ -14,42 +14,44 @@ import (
 //	"encoding/json"
 )
 
+var apiKey = func () string {
+	return os.Getenv("API_KEY")
+}
+
 func main() {
-	
-	apiKey := os.Getenv("API_KEY")
 
 	r := mux.NewRouter()
 	r.HandleFunc("/id/{id}", getId)
-	r.HandleFunc("/search", search).Queries("search", "")
+	r.HandleFunc("/search", search).Queries("primary", "", "secondary", "")
 
 	http.ListenAndServe(":8080", r)
 	
-	client := &http.Client{
-		Transport: &transport.APIKey{Key: apiKey},
-	}
-	customSearchService, err := customsearch.New(client)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	listCall := customSearchService.Cse.List("star wars")
-	listCall.Cx("001559197599027589089:09osstjowqu")
+	// client := &http.Client{
+	// 	Transport: &transport.APIKey{Key: apiKey()},
+	// }
+	// customSearchService, err := customsearch.New(client)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// 	return
+	// }
+	// listCall := customSearchService.Cse.List("star wars")
+	// listCall.Cx("001559197599027589089:09osstjowqu")
 	
-	search, err :=listCall.Do()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// search, err :=listCall.Do()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 	// print links
-	for _, link := range search.Items {
+	// for _, link := range search.Items {
 		
-		body := getLinkBody(link.Link)
-		fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
+	// 	body := getLinkBody(link.Link)
+	// 	fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
 		
-		refs := getReferences(body, "Luke")
-		for _, i := range refs {
-			fmt.Println("<<<   " + i + "   >>>")
-		}
-	}
+	// 	refs := getReferences(body, "Luke")
+	// 	for _, i := range refs {
+	// 		fmt.Println("<<<   " + i + "   >>>")
+	// 	}
+	// }
 	// go get links and stuff and search them
 }
 
@@ -57,10 +59,39 @@ func getId (w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("GetIDHERE"))
 }
 
-
 func search (w http.ResponseWriter, r *http.Request) {
 	vars := r.URL.Query()
-	w.Write([]byte("Search: " + vars.Get("search")))
+	createCall(vars.Get("primary"), vars.Get("secondary"))
+	w.Write([]byte("Search: " + vars.Get("primary")))
+}
+
+func createCall(primary, secondary string) {
+	client := &http.Client{
+		Transport: &transport.APIKey{Key: apiKey()},
+	}
+	customSearchService, err := customsearch.New(client)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	listCall := customSearchService.Cse.List(primary)
+	listCall.Cx("001559197599027589089:09osstjowqu")
+	
+	resp, err :=listCall.Do()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, link := range resp.Items {
+		
+		body := getLinkBody(link.Link)
+		fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
+		
+		refs := getReferences(body, secondary)
+		for _, i := range refs {
+			fmt.Println("<<<   " + i + "   >>>")
+		}
+	}
 }
 
 // fetch the actual page. maybe only get the body of html? maybe not
@@ -95,7 +126,7 @@ func getReferences(page, key string) []string {
 	return references
 }
 
-// find single reference to key and get surounding context and rest of body to search
+// find single reference to key and get surounding context and rest of body to resp
 func getReferenceIndex(rest, key string, pageLenDif int) (string, int) {
 	index := strings.Index(rest, key)
 	return rest[index+len(key):], pageLenDif + index + len(key)
