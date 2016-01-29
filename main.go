@@ -3,19 +3,26 @@ package main
 import (
 	"google.golang.org/api/customsearch/v1"
 	"google.golang.org/api/googleapi/transport"
+	"github.com/gorilla/mux"
 	"fmt"
 	"log"
 	"net/http"
+//	"net/url"
 	"os"
-	"strings"
 	"io/ioutil"
-
+	"strings"
 //	"encoding/json"
 )
 
 func main() {
-
+	
 	apiKey := os.Getenv("API_KEY")
+
+	r := mux.NewRouter()
+	r.HandleFunc("/id/{id}", getId)
+	r.HandleFunc("/search", search).Queries("search", "")
+
+	http.ListenAndServe(":8080", r)
 	
 	client := &http.Client{
 		Transport: &transport.APIKey{Key: apiKey},
@@ -43,9 +50,17 @@ func main() {
 			fmt.Println("<<<   " + i + "   >>>")
 		}
 	}
-
 	// go get links and stuff and search them
-	
+}
+
+func getId (w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("GetIDHERE"))
+}
+
+
+func search (w http.ResponseWriter, r *http.Request) {
+	vars := r.URL.Query()
+	w.Write([]byte("Search: " + vars.Get("search")))
 }
 
 // fetch the actual page. maybe only get the body of html? maybe not
