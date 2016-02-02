@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-//	"net/url"
 	"os"
 	"io/ioutil"
 	"strings"
@@ -19,15 +18,18 @@ import (
 var (
 	apiKey = func () string {
 		return os.Getenv("API_KEY")
-	}
-	
-	ids map[string]chan Result = make(map[string]chan Result)
+	}	
+	//ids map[string]chan Result = make(map[string]chan Result)
+	ids map[string]func() func(http.ResponseWriter) bool = make(map[string]func() func(http.ResponseWriter) bool)
+	count map[string]int = make(map[string]int)
 )
+const maxResults = 10
 
 type Result struct {
 	Indices []int
 	Page string
 	Site string
+	Rank int
 }
 
 func main() {
@@ -40,20 +42,15 @@ func main() {
 func getId (w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-	ch, ok := ids[id]
+	getResult, ok := ids[id]
 	if !ok {
 		w.Write([]byte("Incorrect ID"))
 		return
 	}
-	var res Result
-	res =<- ch
-	js, err := json.Marshal(res)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	moreResults := getResult()(w)
+	if !moreResults {
+		delete(ids, id)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(js)
 }
 
 func search (w http.ResponseWriter, r *http.Request) {
@@ -82,15 +79,39 @@ func runSearches(primary, secondary string, w http.ResponseWriter, id string) {
 	}
 
 	results := make(chan Result)
-	
-	for _, link := range resp.Items {
-		go runSearch(link, results, secondary, id)
-		// make all on function
+	createCallback(results, id)
+
+	for i, link := range resp.Items {
+		go runSearch(link, results, secondary, i)
+	}
+}
+
+func createCallback(results chan Result, id string) {
+	var resultsReturned int
+	ids[id] = func() func(http.ResponseWriter) bool {
+		return func(w http.ResponseWriter) bool {
+			fmt.Println(resultsReturned)
+			if resultsReturned >= maxResults {
+				w.Write([]byte("No More!"))
+				return false
+			}
+			resultsReturned++
+			var res Result
+			res = <- results
+			js, err := json.Marshal(res)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return false
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(js)
+			return true
+		}
 	}
 }
 
 func runSearch(link *customsearch.Result, resultsChan chan Result,
-	secondary, id string) {
+	secondary string, rank int) {
 
 	body := getLinkBody(link.Link)
 	
@@ -101,9 +122,12 @@ func runSearch(link *customsearch.Result, resultsChan chan Result,
 		Indices: indices,
 		Page: body,
 		Site: link.Link,
+		Rank: rank,
 	}
-	ids[id] = resultsChan
-	ids[id] <- result
+	// ids[id] = resultsChan
+	// ids[id] <- result
+	resultsChan <- result
+
 }
 
 // fetch the actual page. maybe only get the body of html? maybe not
