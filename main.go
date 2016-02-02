@@ -11,61 +11,60 @@ import (
 	"os"
 	"io/ioutil"
 	"strings"
-//	"encoding/json"
+	"time"
+	"math/rand"
+	"encoding/json"
 )
 
-var apiKey = func () string {
-	return os.Getenv("API_KEY")
+var (
+	apiKey = func () string {
+		return os.Getenv("API_KEY")
+	}
+	
+	ids map[string]chan Result = make(map[string]chan Result)
+)
+
+type Result struct {
+	Indices []int
+	Page string
+	Site string
 }
 
 func main() {
-
 	r := mux.NewRouter()
 	r.HandleFunc("/id/{id}", getId)
 	r.HandleFunc("/search", search).Queries("primary", "", "secondary", "")
-
 	http.ListenAndServe(":8080", r)
-	
-	// client := &http.Client{
-	// 	Transport: &transport.APIKey{Key: apiKey()},
-	// }
-	// customSearchService, err := customsearch.New(client)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// 	return
-	// }
-	// listCall := customSearchService.Cse.List("star wars")
-	// listCall.Cx("001559197599027589089:09osstjowqu")
-	
-	// search, err :=listCall.Do()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// print links
-	// for _, link := range search.Items {
-		
-	// 	body := getLinkBody(link.Link)
-	// 	fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
-		
-	// 	refs := getReferences(body, "Luke")
-	// 	for _, i := range refs {
-	// 		fmt.Println("<<<   " + i + "   >>>")
-	// 	}
-	// }
-	// go get links and stuff and search them
 }
 
 func getId (w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("GetIDHERE"))
+	vars := mux.Vars(r)
+	id := vars["id"]
+	ch, ok := ids[id]
+	if !ok {
+		w.Write([]byte("Incorrect ID"))
+		return
+	}
+	var res Result
+	res =<- ch
+	js, err := json.Marshal(res)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
 }
 
 func search (w http.ResponseWriter, r *http.Request) {
 	vars := r.URL.Query()
-	createCall(vars.Get("primary"), vars.Get("secondary"))
-	w.Write([]byte("Search: " + vars.Get("primary")))
+	id := randomString(16)
+	w.Write([]byte(id))
+	runSearches(vars.Get("primary"), vars.Get("secondary"), w, id)
+	w.Write([]byte("\nSearch: " + vars.Get("primary")))
 }
 
-func createCall(primary, secondary string) {
+func runSearches(primary, secondary string, w http.ResponseWriter, id string) {
 	client := &http.Client{
 		Transport: &transport.APIKey{Key: apiKey()},
 	}
@@ -82,16 +81,29 @@ func createCall(primary, secondary string) {
 		log.Fatal(err)
 	}
 
+	results := make(chan Result)
+	
 	for _, link := range resp.Items {
-		
-		body := getLinkBody(link.Link)
-		fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
-		
-		refs := getReferences(body, secondary)
-		for _, i := range refs {
-			fmt.Println("<<<   " + i + "   >>>")
-		}
+		go runSearch(link, results, secondary, id)
+		// make all on function
 	}
+}
+
+func runSearch(link *customsearch.Result, resultsChan chan Result,
+	secondary, id string) {
+
+	body := getLinkBody(link.Link)
+	
+	fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
+	
+	indices := getReferences(body, secondary)
+	result := Result{
+		Indices: indices,
+		Page: body,
+		Site: link.Link,
+	}
+	ids[id] = resultsChan
+	ids[id] <- result
 }
 
 // fetch the actual page. maybe only get the body of html? maybe not
@@ -111,7 +123,7 @@ func getLinkBody(link string) string {
 }
 
 // get all the references to the key string
-func getReferences(page, key string) []string {
+func getReferences(page, key string) []int {
 	count := strings.Count(page, key)
 //	references := make([]string, count)
 	rest := page
@@ -122,8 +134,8 @@ func getReferences(page, key string) []string {
 		indices = append(indices, index)
 		//references = append(references, reference)
 	}
-	references := getQuotes(page, indices, len(key), 60)
-	return references
+	//references := getQuotes(page, indices, len(key), 60)
+	return indices
 }
 
 // find single reference to key and get surounding context and rest of body to resp
@@ -149,4 +161,14 @@ func getQuotes(page string, indices []int, keyLen, contextLength int) []string {
 		quotes = append(quotes, page[back:front])
 	}
 	return quotes
+}
+
+func randomString(strlen int) string {
+	rand.Seed(time.Now().UTC().UnixNano())
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	result := make([]byte, strlen)
+	for i := 0; i < strlen; i++ {
+		result[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(result)
 }
