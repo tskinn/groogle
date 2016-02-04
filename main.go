@@ -4,6 +4,7 @@ import (
 	"google.golang.org/api/customsearch/v1"
 	"google.golang.org/api/googleapi/transport"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/handlers"
 	"fmt"
 	"log"
 	"net/http"
@@ -34,7 +35,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/id/{id}", getId)
 	r.HandleFunc("/search", search).Queries("primary", "", "secondary", "")
-	http.ListenAndServe(":8080", r)
+	http.ListenAndServe(":8080", handlers.CORS(handlers.AllowedOrigins([]string{"localhost"}))(r))
 }
 
 func getId (w http.ResponseWriter, r *http.Request) {
