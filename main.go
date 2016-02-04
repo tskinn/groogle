@@ -19,7 +19,6 @@ var (
 	apiKey = func () string {
 		return os.Getenv("API_KEY")
 	}	
-	//ids map[string]chan Result = make(map[string]chan Result)
 	ids map[string]func() func(http.ResponseWriter) bool = make(map[string]func() func(http.ResponseWriter) bool)
 	count map[string]int = make(map[string]int)
 )
@@ -39,20 +38,29 @@ func main() {
 	http.ListenAndServe(":8080", r)
 }
 
+// /id/{id} endpoint
+// Checks if the given id is in the map and runs the
+// function the map points to
 func getId (w http.ResponseWriter, r *http.Request) {
+	// get id from url
 	vars := mux.Vars(r)
 	id := vars["id"]
+	// get function from map
 	getResult, ok := ids[id]
 	if !ok {
 		w.Write([]byte("Incorrect ID"))
 		return
 	}
+	// run function
 	moreResults := getResult()(w)
 	if !moreResults {
 		delete(ids, id)
 	}
 }
 
+// /search endpoint
+// Runs the search and returns the id of the results
+// (the id which will be used to retrieve the results)
 func search (w http.ResponseWriter, r *http.Request) {
 	vars := r.URL.Query()
 	id := randomString(16)
@@ -61,6 +69,7 @@ func search (w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("\nSearch: " + vars.Get("primary")))
 }
 
+//
 func runSearches(primary, secondary string, w http.ResponseWriter, id string) {
 	client := &http.Client{
 		Transport: &transport.APIKey{Key: apiKey()},
