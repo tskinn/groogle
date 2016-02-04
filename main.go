@@ -64,24 +64,24 @@ func getId (w http.ResponseWriter, r *http.Request) {
 // (the id which will be used to retrieve the results)
 func search (w http.ResponseWriter, r *http.Request) {
 	type Result struct {
-		Id string `json "id"`
-	}
-
-	type Thing struct {
-		Result Result `json "Result"`
+		Id string `json:"Id"`
 	}
 
 	vars := r.URL.Query()
 	id := randomString(16)
 	runSearches(vars.Get("primary"), vars.Get("secondary"), w, id)
-	rs := Thing{Result: Result{Id: id}}
-	js, err := json.Marshal(rs)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	rs := Result{Id: id}
+	// js, err := json.Marshal(rs)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	return
+	// }
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(js)
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(rs); err != nil {
+		panic(err)
+	}
+	// w.Write(js)
 	// w.Write([]byte(id))
 
 	// w.Write([]byte("\nSearch: " + vars.Get("primary")))
