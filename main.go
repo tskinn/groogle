@@ -37,7 +37,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/id/{id}", getId)
 	r.HandleFunc("/search", search).Queries("primary", "", "secondary", "")
-	http.ListenAndServe(":8080", handlers.CORS(handlers.AllowedOrigins([]string{"localhost"}))(r))
+	http.ListenAndServe(":8080", handlers.CORS(handlers.AllowedOrigins([]string{"*"}))(r))
 }
 
 func getId (w http.ResponseWriter, r *http.Request) {
@@ -55,11 +55,28 @@ func getId (w http.ResponseWriter, r *http.Request) {
 }
 
 func search (w http.ResponseWriter, r *http.Request) {
+	type Result struct {
+		Id string `json "id"`
+	}
+
+	type Thing struct {
+		Result Result `json "Result"`
+	}
+
 	vars := r.URL.Query()
 	id := randomString(16)
-	w.Write([]byte(id))
 	runSearches(vars.Get("primary"), vars.Get("secondary"), w, id)
-	w.Write([]byte("\nSearch: " + vars.Get("primary")))
+	rs := Thing{Result: Result{Id: id}}
+	js, err := json.Marshal(rs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+	// w.Write([]byte(id))
+
+	// w.Write([]byte("\nSearch: " + vars.Get("primary")))
 }
 
 func runSearches(primary, secondary string, w http.ResponseWriter, id string) {
