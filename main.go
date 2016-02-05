@@ -68,8 +68,9 @@ func search (w http.ResponseWriter, r *http.Request) {
 	id := randomString(16)
 	runSearches(vars.Get("primary"), vars.Get("secondary"), w, id)
 	rs := Result{Id: id}
-	mp := make(map[string]Result)
-	mp["data"] = rs
+	mp := make(map[string][]Result)
+	mp["data"] = make([]Result, 1)
+	mp["data"][0] = rs
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(mp); err != nil {
