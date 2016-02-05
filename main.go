@@ -14,6 +14,7 @@ import (
 	"time"
 	"math/rand"
 	"encoding/json"
+	"runtime"
 )
 
 var (
@@ -64,13 +65,15 @@ func getId (w http.ResponseWriter, r *http.Request) {
 // Runs the search and returns the id of the results
 // (the id which will be used to retrieve the results)
 func search (w http.ResponseWriter, r *http.Request) {
+	fmt.Println("NumGoroutines: ", runtime.NumGoroutine())
 	vars := r.URL.Query()
 	id := randomString(16)
 	runSearches(vars.Get("primary"), vars.Get("secondary"), w, id)
 	rs := Result{Id: id}
-	mp := make(map[string][]Result)
-	mp["data"] = make([]Result, 1)
-	mp["data"][0] = rs
+	mp := make(map[string]Result)
+	// mp["data"] = make([]Result, 1)
+	// mp["data"][0] = rs
+	mp["data"] = rs
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(mp); err != nil {
@@ -133,7 +136,7 @@ func runSearch(link *customsearch.Result, resultsChan chan Result,
 
 	body := getLinkBody(link.Link)
 	
-	fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
+	//fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
 	
 	indices := getReferences(body, secondary)
 	result := Result{
