@@ -26,10 +26,11 @@ var (
 const maxResults = 10
 
 type Result struct {
-	Indices []int
-	Page string
-	Site string
-	Rank int
+	Id string `json:"id"`
+	Indices []int `json:"indices"`
+	Page string `json:"page"`
+	Site string `json:"site"`
+	Rank int `json:"rank"`
 }
 
 func main() {
@@ -63,28 +64,17 @@ func getId (w http.ResponseWriter, r *http.Request) {
 // Runs the search and returns the id of the results
 // (the id which will be used to retrieve the results)
 func search (w http.ResponseWriter, r *http.Request) {
-	type Result struct {
-		Id string `json:"Id"`
-	}
-
 	vars := r.URL.Query()
 	id := randomString(16)
 	runSearches(vars.Get("primary"), vars.Get("secondary"), w, id)
 	rs := Result{Id: id}
-	// js, err := json.Marshal(rs)
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
+	mp := make(map[string]Result)
+	mp["data"] = rs
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(rs); err != nil {
+	if err := json.NewEncoder(w).Encode(mp); err != nil {
 		panic(err)
 	}
-	// w.Write(js)
-	// w.Write([]byte(id))
-
-	// w.Write([]byte("\nSearch: " + vars.Get("primary")))
 }
 
 //
