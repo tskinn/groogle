@@ -1,10 +1,13 @@
 package main
 
 import (
-	"google.golang.org/api/customsearch/v1"
-	"google.golang.org/api/googleapi/transport"
+//	"google.golang.org/api/customsearch/v1"
+//	"google.golang.org/api/googleapi/transport"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/handlers"
+	"github.com/PuerkitoBio/goquery"
+//	"golang.org/x/net/html"
+//	"bytes"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,14 +18,15 @@ import (
 	"math/rand"
 	"encoding/json"
 	"runtime"
+	"net/url"
 )
 
 var (
 	apiKey = func () string {
 		return os.Getenv("API_KEY")
 	}	
-	ids map[string]func() func(http.ResponseWriter) bool = make(map[string]func() func(http.ResponseWriter) bool)
-	count map[string]int = make(map[string]int)
+	ids = make(map[string]func() func(http.ResponseWriter) bool)
+	count = make(map[string]int)
 )
 const maxResults = 10
 
@@ -68,41 +72,42 @@ func search (w http.ResponseWriter, r *http.Request) {
 	fmt.Println("NumGoroutines: ", runtime.NumGoroutine())
 	vars := r.URL.Query()
 	id := randomString(16)
-	runSearches(vars.Get("primary"), vars.Get("secondary"), w, id)
 	rs := Result{Id: id}
 	mp := make(map[string]Result)
-	// mp["data"] = make([]Result, 1)
-	// mp["data"][0] = rs
 	mp["data"] = rs
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(mp); err != nil {
-		panic(err)
+		fmt.Println("error: ", err)// TODO
 	}
+	runSearches(vars.Get("primary"), vars.Get("secondary"), id)
+	
 }
 
 //
-func runSearches(primary, secondary string, w http.ResponseWriter, id string) {
-	client := &http.Client{
-		Transport: &transport.APIKey{Key: apiKey()},
-	}
-	customSearchService, err := customsearch.New(client)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	listCall := customSearchService.Cse.List(primary)
-	listCall.Cx("001559197599027589089:09osstjowqu")
+func runSearches(primary, secondary string, id string) {
+	// client := &http.Client{
+	// 	Transport: &transport.APIKey{Key: apiKey()},
+	// }
+	// customSearchService, err := customsearch.New(client)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// 	return
+	// }
+	// listCall := customSearchService.Cse.List(primary)
+	// listCall.Cx("001559197599027589089:09osstjowqu")
 	
-	resp, err :=listCall.Do()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// resp, err :=listCall.Do()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	results := make(chan Result)
 	createCallback(results, id)
 
-	for i, link := range resp.Items {
+	links := getLinks(primary)
+	
+	for i, link := range links {
 		go runSearch(link, results, secondary, i)
 	}
 }
@@ -131,10 +136,10 @@ func createCallback(results chan Result, id string) {
 	}
 }
 
-func runSearch(link *customsearch.Result, resultsChan chan Result,
+func runSearch(link string, resultsChan chan Result,
 	secondary string, rank int) {
 
-	body := getLinkBody(link.Link)
+	body := getLinkBody(link)
 	
 	//fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
 	
@@ -142,7 +147,7 @@ func runSearch(link *customsearch.Result, resultsChan chan Result,
 	result := Result{
 		Indices: indices,
 		Page: body,
-		Site: link.Link,
+		Site: link,
 		Rank: rank,
 	}
 	// ids[id] = resultsChan
@@ -216,4 +221,38 @@ func randomString(strlen int) string {
 		result[i] = chars[rand.Intn(len(chars))]
 	}
 	return string(result)
+}
+
+func getLinks(s string) []string {
+	v := url.Values{}
+	v.Add("q", s)
+	doc, err := goquery.NewDocument("https://www.google.com/search?" + v.Encode())
+	if err != nil {
+		fmt.Println("Error: ", err)// TODO
+	}
+	links := make([]string, 0)
+	doc.Find(".r").Each(func (i int, s *goquery.Selection) {
+		l, exists := s.Find("a").Attr("href")
+		if exists {
+			links = append(links, l)
+		}
+	})
+	return pruneLinks(links)
+}
+
+func pruneLinks(s []string) []string {
+	ns := make([]string, 0)
+	for i := range s {
+		first := strings.IndexByte(s[i], '=') + 1
+		last := strings.IndexByte(s[i], '&')
+		plast := strings.IndexByte(s[i], '%')
+		if last > plast && plast != -1 {
+			last = plast
+		}
+		if strings.Contains(s[i][first:last], "http") {
+			ns = append(ns, s[i][first:last])
+			fmt.Println(s[i][first:last])
+		}
+	}
+	return ns
 }
