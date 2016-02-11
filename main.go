@@ -55,12 +55,30 @@ func getId (w http.ResponseWriter, r *http.Request) {
 	// get function from map
 	getResult, ok := ids[id]
 	if !ok {
-		w.Write([]byte("Incorrect ID"))
+		rs := Result{}
+		mp := make(map[string]Result)
+		mp["data"] = rs
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(mp); err != nil {
+			fmt.Println("error: ", err)// TODO
+		}
+
+		// w.Write([]byte("Incorrect ID"))
 		return
 	}
 	// run function
 	moreResults := getResult()(w)
 	if !moreResults {
+		rs := Result{}
+		mp := make(map[string]Result)
+		mp["data"] = rs
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(mp); err != nil {
+			fmt.Println("error: ", err)// TODO
+		}
+		
 		delete(ids, id)
 	}
 }
@@ -102,7 +120,14 @@ func createCallback(results chan Result, id string) {
 		return func(w http.ResponseWriter) bool {
 			fmt.Println(resultsReturned)
 			if resultsReturned >= maxResults {
-				w.Write([]byte("No More!"))
+				rs := Result{}
+				mp := make(map[string]Result)
+				mp["data"] = rs
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				if err := json.NewEncoder(w).Encode(mp); err != nil {
+					fmt.Println("error: ", err)// TODO
+				}
 				return false
 			}
 			resultsReturned++
