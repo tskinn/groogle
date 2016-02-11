@@ -31,11 +31,11 @@ var (
 const maxResults = 10
 
 type Result struct {
-	Id string `json:"id"`
+	Id string     `json:"id"`
 	Indices []int `json:"indices"`
-	Page string `json:"page"`
-	Site string `json:"site"`
-	Rank int `json:"rank"`
+	Page string   `json:"page"`
+	Site string   `json:"site"`
+	Rank int      `json:"rank"`
 }
 
 func main() {
@@ -86,22 +86,6 @@ func search (w http.ResponseWriter, r *http.Request) {
 
 //
 func runSearches(primary, secondary string, id string) {
-	// client := &http.Client{
-	// 	Transport: &transport.APIKey{Key: apiKey()},
-	// }
-	// customSearchService, err := customsearch.New(client)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// 	return
-	// }
-	// listCall := customSearchService.Cse.List(primary)
-	// listCall.Cx("001559197599027589089:09osstjowqu")
-	
-	// resp, err :=listCall.Do()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
 	results := make(chan Result)
 	createCallback(results, id)
 
@@ -124,13 +108,15 @@ func createCallback(results chan Result, id string) {
 			resultsReturned++
 			var res Result
 			res = <- results
-			js, err := json.Marshal(res)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return false
-			}
+			res.Id = id
+			mp := make(map[string]Result)
+			mp["data"] = res
 			w.Header().Set("Content-Type", "application/json")
-			w.Write(js)
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(mp); err != nil {
+				fmt.Println("error: ", err)// TODO
+			}
+			
 			return true
 		}
 	}
