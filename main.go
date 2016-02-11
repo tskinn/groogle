@@ -45,6 +45,18 @@ func main() {
 	http.ListenAndServe(":8080", handlers.CORS(handlers.AllowedOrigins([]string{"*"}))(r))
 }
 
+func writeResult(w http.ResponseWriter, rs Result) {
+
+	mp := make(map[string]Result)
+	mp["data"] = rs
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(mp); err != nil {
+		fmt.Println("error: ", err)// TODO
+	}
+
+}
+
 // /id/{id} endpoint
 // Checks if the given id is in the map and runs the
 // function the map points to
@@ -55,30 +67,13 @@ func getId (w http.ResponseWriter, r *http.Request) {
 	// get function from map
 	getResult, ok := ids[id]
 	if !ok {
-		rs := Result{}
-		mp := make(map[string]Result)
-		mp["data"] = rs
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(mp); err != nil {
-			fmt.Println("error: ", err)// TODO
-		}
-
-		// w.Write([]byte("Incorrect ID"))
+		writeResult(w, Result{})
 		return
 	}
 	// run function
 	moreResults := getResult()(w)
 	if !moreResults {
-		rs := Result{}
-		mp := make(map[string]Result)
-		mp["data"] = rs
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(mp); err != nil {
-			fmt.Println("error: ", err)// TODO
-		}
-		
+//		writeResult(w, Result{})
 		delete(ids, id)
 	}
 }
@@ -90,14 +85,7 @@ func search (w http.ResponseWriter, r *http.Request) {
 	fmt.Println("NumGoroutines: ", runtime.NumGoroutine())
 	vars := r.URL.Query()
 	id := randomString(16)
-	rs := Result{Id: id}
-	mp := make(map[string]Result)
-	mp["data"] = rs
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(mp); err != nil {
-		fmt.Println("error: ", err)// TODO
-	}
+	writeResult(w, Result{Id: id})
 	runSearches(vars.Get("primary"), vars.Get("secondary"), id)
 	
 }
@@ -105,29 +93,25 @@ func search (w http.ResponseWriter, r *http.Request) {
 //
 func runSearches(primary, secondary string, id string) {
 	results := make(chan Result)
-	createCallback(results, id)
-
 	links := getLinks(primary)
+	createCallback(results, id, len(links))
+
+
 	
 	for i, link := range links {
 		go runSearch(link, results, secondary, i)
 	}
 }
 
-func createCallback(results chan Result, id string) {
+func createCallback(results chan Result, id string, numResults int) {
 	var resultsReturned int
+	var totalResults = numResults
 	ids[id] = func() func(http.ResponseWriter) bool {
 		return func(w http.ResponseWriter) bool {
 			fmt.Println(resultsReturned)
-			if resultsReturned >= maxResults {
-				rs := Result{}
-				mp := make(map[string]Result)
-				mp["data"] = rs
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				if err := json.NewEncoder(w).Encode(mp); err != nil {
-					fmt.Println("error: ", err)// TODO
-				}
+			if resultsReturned == totalResults {
+				writeResult(w, Result{})
+				close(results)
 				return false
 			}
 			resultsReturned++
@@ -152,8 +136,6 @@ func runSearch(link string, resultsChan chan Result,
 
 	body := getLinkBody(link)
 	
-	//fmt.Printf("\nWEBSITE: %s  Length: %d\n", link.Link, len(body))
-	
 	indices := getReferences(body, secondary)
 	result := Result{
 		Indices: indices,
@@ -161,8 +143,7 @@ func runSearch(link string, resultsChan chan Result,
 		Site: link,
 		Rank: rank,
 	}
-	// ids[id] = resultsChan
-	// ids[id] <- result
+
 	resultsChan <- result
 
 }
