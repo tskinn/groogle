@@ -61,6 +61,7 @@ func writeResult(w http.ResponseWriter, rs Result) {
 // Checks if the given id is in the map and runs the
 // function the map points to
 func getId (w http.ResponseWriter, r *http.Request) {
+	fmt.Println("NumGoroutines: ", runtime.NumGoroutine())
 	// get id from url
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -108,7 +109,7 @@ func createCallback(results chan Result, id string, numResults int) {
 	var totalResults = numResults
 	ids[id] = func() func(http.ResponseWriter) bool {
 		return func(w http.ResponseWriter) bool {
-			fmt.Println(resultsReturned)
+			//fmt.Println(resultsReturned)
 			if resultsReturned == totalResults {
 				writeResult(w, Result{})
 				close(results)
@@ -243,7 +244,7 @@ func pruneLinks(s []string) []string {
 		}
 		if strings.Contains(s[i][first:last], "http") {
 			ns = append(ns, s[i][first:last])
-			fmt.Println(s[i][first:last])
+			//fmt.Println(s[i][first:last])
 		}
 	}
 	return ns
