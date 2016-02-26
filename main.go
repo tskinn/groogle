@@ -1,13 +1,10 @@
 package main
 
 import (
-//	"google.golang.org/api/customsearch/v1"
-//	"google.golang.org/api/googleapi/transport"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/handlers"
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
-//	"bytes"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +16,7 @@ import (
 	"encoding/json"
 	"runtime"
 	"net/url"
+	"regexp"
 )
 
 var (
@@ -39,7 +37,9 @@ type Result struct {
 }
 
 func main() {
+
 	r := mux.NewRouter()
+	// r.PathPrefix("/").Handler(http.FileServer(http.Dir("./public/")))
 	r.HandleFunc("/id/{id}", getId)
 	r.HandleFunc("/search", search).Queries("primary", "", "secondary", "")
 	http.ListenAndServe(":8080", handlers.CORS(handlers.AllowedOrigins([]string{"*"}))(r))
@@ -136,7 +136,7 @@ func runSearch(link string, resultsChan chan Result,
 	secondary string, rank int) {
 
 	body := getLinkBody(link)
-	
+	getContainingNodes(secondary, body)
 	indices := getReferences(body, secondary)
 	result := Result{
 		Indices: indices,
@@ -146,7 +146,6 @@ func runSearch(link string, resultsChan chan Result,
 	}
 
 	resultsChan <- result
-
 }
 
 // fetch the actual page. maybe only get the body of html? maybe not
@@ -156,7 +155,6 @@ func getLinkBody(link string) string {
 		log.Fatal(err)
 	}
 	body, err := ioutil.ReadAll(res.Body)
-
 	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
@@ -177,27 +175,27 @@ func getReferences(page, key string) []int {
 	return indices
 }
 
-func getthat(s string) {
-	doc, err := html.Parse(strings.NewReader(s))
+func getContainingNodes(s, body string) []html.Node {
+	doc, err := html.Parse(strings.NewReader(body))
 	if err != nil {
 		log.Fatal(err)
 	}
+	nodes := make([]html.Node, 0)
+	reg := regexp.MustCompile(regexify(s))
 	var f func(*html.Node)
 	f = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "a" {
-			
-			// for _, a := range n.Attr {
-			// 	if a.Key == "href" {
-			// 		fmt.Println(a.Val)
-			// 		break
-			// 	}
-			// }
+
+		if reg.MatchString(n.Data) {
+			nodes = append(nodes, *n)
+			fmt.Println(n.Data)
 		}
+		
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			f(c)
 		}
 	}
 	f(doc)
+	return nodes
 }
 
 // find single reference to key and get surounding context and rest of body to resp
@@ -270,4 +268,13 @@ func pruneLinks(s []string) []string {
 		}
 	}
 	return ns
+}
+
+func regexify(s string) string {
+	reg := ""
+	for _, i := range s {
+		tmp := "[" + strings.ToLower(fmt.Sprintf("%c", i)) + "|" + strings.ToUpper(fmt.Sprintf("%c", i)) + "]"
+		reg += tmp
+	}
+	return reg
 }
