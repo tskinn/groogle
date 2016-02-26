@@ -6,7 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/handlers"
 	"github.com/PuerkitoBio/goquery"
-//	"golang.org/x/net/html"
+	"golang.org/x/net/html"
 //	"bytes"
 	"fmt"
 	"log"
@@ -161,24 +161,43 @@ func getLinkBody(link string) string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// TODO check to see if there is better way to convert byte slice to string
-	return string(body[:])
+	return string(body)
 }
 
 // get all the references to the key string
 func getReferences(page, key string) []int {
 	count := strings.Count(page, key)
-//	references := make([]string, count)
 	rest := page
 	index := 0
 	indices := make([]int, 1)
 	for i := 0; i < count; i++ {
 		rest, index = getReferenceIndex(rest, key, index)
 		indices = append(indices, index)
-		//references = append(references, reference)
 	}
-	//references := getQuotes(page, indices, len(key), 60)
 	return indices
+}
+
+func getthat(s string) {
+	doc, err := html.Parse(strings.NewReader(s))
+	if err != nil {
+		log.Fatal(err)
+	}
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "a" {
+			
+			// for _, a := range n.Attr {
+			// 	if a.Key == "href" {
+			// 		fmt.Println(a.Val)
+			// 		break
+			// 	}
+			// }
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(doc)
 }
 
 // find single reference to key and get surounding context and rest of body to resp
@@ -206,6 +225,8 @@ func getQuotes(page string, indices []int, keyLen, contextLength int) []string {
 	return quotes
 }
 
+// create a randome string for an id
+// TODO could be better...
 func randomString(strlen int) string {
 	rand.Seed(time.Now().UTC().UnixNano())
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -216,6 +237,7 @@ func randomString(strlen int) string {
 	return string(result)
 }
 
+// GET search results are parse the results page
 func getLinks(s string) []string {
 	v := url.Values{}
 	v.Add("q", s)
@@ -233,6 +255,7 @@ func getLinks(s string) []string {
 	return pruneLinks(links)
 }
 
+// The links to the actuall results are a little weird so clean them up
 func pruneLinks(s []string) []string {
 	ns := make([]string, 0)
 	for i := range s {
@@ -244,7 +267,6 @@ func pruneLinks(s []string) []string {
 		}
 		if strings.Contains(s[i][first:last], "http") {
 			ns = append(ns, s[i][first:last])
-			//fmt.Println(s[i][first:last])
 		}
 	}
 	return ns
