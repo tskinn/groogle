@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"net/url"
 	"regexp"
+	"golang.org/x/net/html/atom"
 )
 
 var (
@@ -29,11 +30,12 @@ var (
 const maxResults = 10
 
 type Result struct {
-	Id string     `json:"id"`
-	Indices []int `json:"indices"`
-	Page string   `json:"page"`
-	Site string   `json:"site"`
-	Rank int      `json:"rank"`
+	Id string        `json:"id"`
+	Indices []int    `json:"indices"`
+	Results []string `json:"results"`
+	Page string      `json:"page"`
+	Site string      `json:"site"`
+	Rank int         `json:"rank"`
 }
 
 func main() {
@@ -96,8 +98,6 @@ func runSearches(primary, secondary string, id string) {
 	results := make(chan Result)
 	links := getLinks(primary)
 	createCallback(results, id, len(links))
-
-
 	
 	for i, link := range links {
 		go runSearch(link, results, secondary, i)
@@ -136,13 +136,14 @@ func runSearch(link string, resultsChan chan Result,
 	secondary string, rank int) {
 
 	body := getLinkBody(link)
-	getContainingNodes(secondary, body)
+	res := getContainingNodes(secondary, body)
 	indices := getReferences(body, secondary)
 	result := Result{
 		Indices: indices,
 		Page: body,
 		Site: link,
 		Rank: rank,
+		Results: res,
 	}
 
 	resultsChan <- result
@@ -175,19 +176,26 @@ func getReferences(page, key string) []int {
 	return indices
 }
 
-func getContainingNodes(s, body string) []html.Node {
+func getContainingNodes(s, body string) []string {
+
 	doc, err := html.Parse(strings.NewReader(body))
 	if err != nil {
 		log.Fatal(err)
 	}
-	nodes := make([]html.Node, 0)
+	//nodes := make([]html.Node, 0)
+	nodes := make([]string, 0)
 	reg := regexp.MustCompile(regexify(s))
 	var f func(*html.Node)
 	f = func(n *html.Node) {
 
 		if reg.MatchString(n.Data) {
-			nodes = append(nodes, *n)
-			fmt.Println(n.Data)
+			//nodes = append(nodes, *n)
+			// nodes = append(nodes, n.Data)
+			p := n.Parent
+			nodes = append(nodes, p.Data)
+			for c := p.FirstChild; c != nil && isAtom(c.DataAtom); c = c.NextSibling {
+				nodes = append(nodes, c.Data)
+			}
 		}
 		
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -196,6 +204,16 @@ func getContainingNodes(s, body string) []html.Node {
 	}
 	f(doc)
 	return nodes
+}
+
+func isAtom(a atom.Atom) bool {
+	if a == atom.A ||
+		a == atom.I ||
+		a == atom.P ||
+		a == atom.Div {
+		return true
+	}
+	return false
 }
 
 // find single reference to key and get surounding context and rest of body to resp
