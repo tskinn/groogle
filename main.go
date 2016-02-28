@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"io/ioutil"
 	"strings"
 	"time"
@@ -18,12 +17,11 @@ import (
 	"net/url"
 	"regexp"
 	"golang.org/x/net/html/atom"
+	. "html"
+	"./strip"
 )
 
 var (
-	apiKey = func () string {
-		return os.Getenv("API_KEY")
-	}	
 	ids = make(map[string]func() func(http.ResponseWriter) bool)
 	count = make(map[string]int)
 )
@@ -36,6 +34,7 @@ type Result struct {
 	Page string      `json:"page"`
 	Site string      `json:"site"`
 	Rank int         `json:"rank"`
+	Search string    `json:"search"`
 }
 
 func main() {
@@ -136,17 +135,29 @@ func runSearch(link string, resultsChan chan Result,
 	secondary string, rank int) {
 
 	body := getLinkBody(link)
-	res := getContainingNodes(secondary, body)
+	// res := getContainingNodes(secondary, body)
+	body = removeDoctype(UnescapeString(strip.StripTags(body)))
 	indices := getReferences(body, secondary)
 	result := Result{
 		Indices: indices,
 		Page: body,
 		Site: link,
 		Rank: rank,
-		Results: res,
+		Search: secondary,
 	}
 
 	resultsChan <- result
+}
+
+func removeDoctype(s string) string {
+	// if s[0] != '<' {
+	// 	return s
+	// }
+	end := strings.IndexByte(s, '>')
+	if end > 0 {
+		return s[end + 1:]
+	}
+	return s
 }
 
 // fetch the actual page. maybe only get the body of html? maybe not
@@ -165,13 +176,11 @@ func getLinkBody(link string) string {
 
 // get all the references to the key string
 func getReferences(page, key string) []int {
-	count := strings.Count(page, key)
-	rest := page
-	index := 0
-	indices := make([]int, 1)
-	for i := 0; i < count; i++ {
-		rest, index = getReferenceIndex(rest, key, index)
-		indices = append(indices, index)
+	reg := regexp.MustCompile(regexify(key))
+	indi := reg.FindAllIndex([]byte(page), -1)
+	indices := make([]int, 0)
+	for _, i := range indi {
+		indices = append(indices, i[0])
 	}
 	return indices
 }
@@ -187,15 +196,12 @@ func getContainingNodes(s, body string) []string {
 	reg := regexp.MustCompile(regexify(s))
 	var f func(*html.Node)
 	f = func(n *html.Node) {
-
 		if reg.MatchString(n.Data) {
-			//nodes = append(nodes, *n)
-			// nodes = append(nodes, n.Data)
+			str := ""
 			p := n.Parent
-			nodes = append(nodes, p.Data)
-			for c := p.FirstChild; c != nil && isAtom(c.DataAtom); c = c.NextSibling {
-				nodes = append(nodes, c.Data)
-			}
+			// str += getData(p)
+			str += strip.StripTags(p.Data)
+			nodes = append(nodes, str)
 		}
 		
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -206,10 +212,27 @@ func getContainingNodes(s, body string) []string {
 	return nodes
 }
 
+func getData(n *html.Node) string {
+	data := ""
+	if n == nil {
+		return ""
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		data += c.Data + getData(c)
+	}
+	return data
+}
+
 func isAtom(a atom.Atom) bool {
-	if a == atom.A ||
-		a == atom.I ||
-		a == atom.P ||
+	if a == atom.A    ||
+		a == atom.I    ||
+		a == atom.P    ||
+		a == atom.H1   ||
+		a == atom.H2   ||
+		a == atom.H3   ||
+		a == atom.H4   ||
+		a == atom.H5   ||
+		a == atom.H6   ||
 		a == atom.Div {
 		return true
 	}
